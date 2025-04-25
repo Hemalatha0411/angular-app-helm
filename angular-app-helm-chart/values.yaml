@@ -1,7 +1,7 @@
 replicaCount: 1
 
 image:
-  repository: your-dockerhub-user/angular-app
+  repository: 863518427890.dkr.ecr.us-east-1.amazonaws.com/cmm-zpl/zpl-flask-be
   pullPolicy: IfNotPresent
   tag: latest
 
