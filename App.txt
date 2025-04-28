@@ -1,0 +1,66 @@
+Folder: angular-terraform-deploy
+
+--- provider.tf ---
+
+terraform { required_providers { helm = { source  = "hashicorp/helm" version = "> 2.22" } } }
+
+provider "kubernetes" { config_path = "~/.kube/config" }
+
+provider "helm" { kubernetes { config_path = "~/.kube/config" } }
+
+--- variables.tf ---
+
+variable "namespace" { description = "Namespace to deploy the Angular app" type        = string default     = "default" }
+
+variable "release_name" { description = "Helm release name" type        = string default     = "angular-app" }
+
+--- main.tf ---
+
+resource "helm_release" "angular_app" { name       = var.release_name namespace  = var.namespace chart      = "${path.module}/angular-app" values     = [ file("${path.module}/angular-app/values.yaml") ]
+
+timeout            = 600 cleanup_on_fail    = true dependency_update  = true recreate_pods      = true }
+
+--- outputs.tf ---
+
+output "helm_release_name" { value = helm_release.angular_app.name }
+
+output "namespace" { value = helm_release.angular_app.namespace }
+
+output "status" { value = helm_release.angular_app.status }
+
+Folder: angular-app/ (your Helm chart folder)
+
+--- Chart.yaml ---
+
+apiVersion: v2 name: angular-app description: A Helm chart for Angular Frontend application type: application version: 0.1.0 appVersion: "1.0"
+
+--- values.yaml ---
+
+replicaCount: 2
+
+image: repository: 863518427890.dkr.ecr.us-east-1.amazonaws.com/cmm-zpl/angular-fe pullPolicy: IfNotPresent tag: latest
+
+service: type: ClusterIP port: 80
+
+ingress: enabled: true className: nginx annotations: kubernetes.io/ingress.class: nginx nginx.ingress.kubernetes.io/rewrite-target: / hosts: - host: angular-app.example.com paths: - path: / pathType: Prefix
+
+resources: requests: cpu: 100m memory: 128Mi limits: cpu: 500m memory: 256Mi
+
+--- templates/deployment.yaml ---
+
+apiVersion: apps/v1 kind: Deployment metadata: name: {{ include "angular-app.fullname" . }} labels: app: {{ include "angular-app.name" . }} spec: replicas: {{ .Values.replicaCount }} selector: matchLabels: app: {{ include "angular-app.name" . }} template: metadata: labels: app: {{ include "angular-app.name" . }} spec: containers: - name: {{ include "angular-app.name" . }} image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}" imagePullPolicy: {{ .Values.image.pullPolicy }} ports: - containerPort: 80 resources: {{- toYaml .Values.resources | nindent 12 }}
+
+--- templates/service.yaml ---
+
+apiVersion: v1 kind: Service metadata: name: {{ include "angular-app.fullname" . }} labels: app: {{ include "angular-app.name" . }} spec: type: {{ .Values.service.type }} ports: - port: {{ .Values.service.port }} targetPort: 80 selector: app: {{ include "angular-app.name" . }}
+
+--- templates/ingress.yaml ---
+
+{{- if .Values.ingress.enabled }} apiVersion: networking.k8s.io/v1 kind: Ingress metadata: name: {{ include "angular-app.fullname" . }} annotations: {{- toYaml .Values.ingress.annotations | nindent 4 }} spec: ingressClassName: {{ .Values.ingress.className }} rules: {{- range .Values.ingress.hosts }} - host: {{ .host }} http: paths: {{- range .paths }} - path: {{ .path }} pathType: {{ .pathType }} backend: service: name: {{ include "angular-app.fullname" $ }} port: number: 80 {{- end }} {{- end }} {{- end }}
+
+--- templates/_helpers.tpl ---
+
+{{- define "angular-app.name" -}} angular-app {{- end }}
+
+{{- define "angular-app.fullname" -}} {{ printf "%s-%s" .Release.Name (include "angular-app.name" .) }} {{- end }}
+
